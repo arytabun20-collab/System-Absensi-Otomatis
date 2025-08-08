@@ -96,7 +96,8 @@
                             <th class="py-3 px-4 text-left">No.</th>
                             <th class="py-3 px-4 text-left">Nama</th>
                             <th class="py-3 px-4 text-left">NIM</th>
-                            <th class="py-3 px-4 text-center">Foto</th>
+                            <th class="py-3 px-4 text-center">Foto Masuk</th>
+                            <th class="py-3 px-4 text-center">Foto Pulang</th>
                             <th class="py-3 px-4 text-left">Tanggal Kirim</th>
                             <th class="py-3 px-4 text-left">Waktu Masuk</th>
                             <th class="py-3 px-4 text-left">Waktu Pulang</th>
@@ -162,12 +163,12 @@
         const modalMahasiswa = document.getElementById('modal-mahasiswa');
         const tabelMahasiswaBody = document.getElementById('tabel-mahasiswa-body');
         const tombolTutupModalMahasiswa = document.getElementById('tombol-tutup-modal-mahasiswa');
-        const btnHapusSemua = document.getElementById('btn-hapus-semua'); // Tambahan
+        const btnHapusSemua = document.getElementById('btn-hapus-semua');
 
         // --- Konfigurasi ---
         const ADMIN_EMAIL = 'admin@pte.com';
         const ADMIN_PASSWORD = 'admin123';
-        const EMAIL_ADMIN_TUJUAN = 'kflarie@gmail.com';
+        const EMAIL_ADMIN_TUJUAN = 'arytabun10@gmail.com'; // Email diubah sesuai permintaan
 
         // --- Fungsi Helper & Navigasi ---
         const tampilkanModal = (judul, pesan, isError = false) => {
@@ -204,7 +205,7 @@
         tombolTutupModal.addEventListener('click', () => { modalKonfirmasi.style.display = 'none'; });
         btnLihatMahasiswa.addEventListener('click', tampilkanDaftarMahasiswa);
         tombolTutupModalMahasiswa.addEventListener('click', () => { modalMahasiswa.style.display = 'none'; });
-        btnHapusSemua.addEventListener('click', hapusSemuaLaporan); // Tambahan
+        btnHapusSemua.addEventListener('click', hapusSemuaLaporan);
 
         // --- Logika Registrasi & Login ---
         formDaftar.addEventListener('submit', (event) => {
@@ -233,32 +234,76 @@
             else { tampilkanModal('Login Gagal', 'Email atau password salah.', true); }
         });
 
-        // --- Logika Absensi Mahasiswa ---
+        // --- Logika Absensi Mahasiswa (Logika Inti Diubah Total) ---
         formAbsen.addEventListener('submit', (event) => {
             event.preventDefault();
-            if (!formAbsen.checkValidity()) { formAbsen.reportValidity(); return; }
+            if (!formAbsen.checkValidity()) {
+                formAbsen.reportValidity();
+                return;
+            }
+
             const nama = document.getElementById('nama').value;
             const nim = document.getElementById('nim').value;
             const kampus = document.getElementById('kampus').value;
             const foto = document.getElementById('foto').files[0];
+
             const reader = new FileReader();
             reader.readAsDataURL(foto);
+            
             reader.onloadend = function() {
+                const fotoResult = reader.result;
                 const waktuSekarang = new Date();
-                const newSubmission = {
-                    nama: nama, nim: nim, kampus: kampus, fotoBase64: reader.result,
-                    waktu: waktuSekarang.toISOString(),
-                    waktuMasuk: waktuSekarang.toTimeString().slice(0, 5),
-                    waktuPulang: '',
-                    status: 'Hadir'
-                };
+                const tanggalHariIni = waktuSekarang.toISOString().split('T')[0]; // Format YYYY-MM-DD
+
                 let absensiData = JSON.parse(localStorage.getItem('absensi_data')) || [];
-                absensiData.push(newSubmission);
-                localStorage.setItem('absensi_data', JSON.stringify(absensiData));
-                tampilkanModal('Absensi Terkirim', 'Data Anda telah disimpan.');
-                formAbsen.reset();
-            }
+
+                // Cari apakah sudah ada data absensi untuk NIM ini pada hari ini
+                const indexDataHariIni = absensiData.findIndex(data =>
+                    data.nim === nim && new Date(data.waktu).toISOString().split('T')[0] === tanggalHariIni
+                );
+
+                if (indexDataHariIni === -1) {
+                    // KASUS 1: ABSEN MASUK (Belum ada data hari ini)
+                    const newSubmission = {
+                        nama: nama,
+                        nim: nim,
+                        kampus: kampus,
+                        fotoBase64: fotoResult,
+                        fotoPulangBase64: '',
+                        waktu: waktuSekarang.toISOString(),
+                        waktuMasuk: waktuSekarang.toTimeString().slice(0, 8),
+                        waktuPulang: '',
+                        status: 'Hadir'
+                    };
+                    absensiData.push(newSubmission);
+                    localStorage.setItem('absensi_data', JSON.stringify(absensiData));
+                    tampilkanModal('Absensi Masuk Berhasil', 'Data absensi masuk Anda telah disimpan.');
+                    formAbsen.reset();
+                } else {
+                    // KASUS 2 & 3: Sudah pernah absen hari ini
+                    let dataHariIni = absensiData[indexDataHariIni];
+
+                    // Cek apakah absen pulangnya masih kosong
+                    if (!dataHariIni.fotoPulangBase64 && !dataHariIni.waktuPulang) {
+                        // KASUS 2: ABSEN PULANG (Absen masuk sudah ada, absen pulang belum)
+                        dataHariIni.fotoPulangBase64 = fotoResult;
+                        dataHariIni.waktuPulang = waktuSekarang.toTimeString().slice(0, 8);
+                        
+                        localStorage.setItem('absensi_data', JSON.stringify(absensiData));
+                        tampilkanModal('Absensi Pulang Berhasil', 'Data absensi pulang Anda telah diperbarui.');
+                        formAbsen.reset();
+                    } else {
+                        // KASUS 3: BATAS TERCAPAI (Sudah absen masuk dan pulang)
+                        tampilkanModal(
+                            'Batas Absensi Tercapai',
+                            'Anda sudah melakukan absensi masuk dan pulang untuk hari ini.',
+                            true
+                        );
+                    }
+                }
+            };
         });
+
 
         // --- Logika Halaman Admin ---
         function tampilkanLaporanAbsensi() {
@@ -266,7 +311,7 @@
 
             tabelLaporanBody.innerHTML = '';
             if (absensiData.length === 0) {
-                tabelLaporanBody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-gray-500">Tidak ada data absensi.</td></tr>`;
+                tabelLaporanBody.innerHTML = `<tr><td colspan="10" class="text-center py-4 text-gray-500">Tidak ada data absensi.</td></tr>`;
                 return;
             }
             
@@ -275,16 +320,25 @@
             absensiData.forEach((data, index) => {
                 const waktuKirimObj = new Date(data.waktu);
                 const waktuKirimFormatted = waktuKirimObj.toLocaleDateString('id-ID', {day: '2-digit', month: 'short', year: 'numeric'}) + ' ' + waktuKirimObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                
+                let fotoPulangHtml;
+                if (data.fotoPulangBase64) {
+                    fotoPulangHtml = `<img src="${data.fotoPulangBase64}" class="h-12 w-12 object-cover rounded-md mx-auto cursor-pointer" onclick="tampilkanModal('Foto Bukti Pulang', '<img src=\\'${data.fotoPulangBase64}\\' class=\\'w-full h-auto rounded-lg\\'>')">`;
+                } else {
+                    fotoPulangHtml = `<span class="text-gray-400">-</span>`;
+                }
+
                 const row = document.createElement('tr');
                 row.className = 'border-b border-gray-200 hover:bg-gray-50';
                 row.innerHTML = `
                     <td class="py-3 px-4">${index + 1}</td>
                     <td class="py-3 px-4">${data.nama}</td>
                     <td class="py-3 px-4">${data.nim}</td>
-                    <td class="py-3 px-4 text-center"><img src="${data.fotoBase64}" class="h-12 w-12 object-cover rounded-md mx-auto cursor-pointer" onclick="tampilkanModal('Foto Bukti', '<img src=\\'${data.fotoBase64}\\' class=\\'w-full h-auto rounded-lg\\'>')"></td>
+                    <td class="py-3 px-4 text-center"><img src="${data.fotoBase64}" class="h-12 w-12 object-cover rounded-md mx-auto cursor-pointer" onclick="tampilkanModal('Foto Bukti Masuk', '<img src=\\'${data.fotoBase64}\\' class=\\'w-full h-auto rounded-lg\\'>')"></td>
+                    <td class="py-3 px-4 text-center">${fotoPulangHtml}</td>
                     <td class="py-3 px-4">${waktuKirimFormatted}</td>
-                    <td class="py-3 px-4"><input type="time" class="border rounded px-2 py-1 w-full" value="${data.waktuMasuk || ''}" onchange="simpanWaktu(${index}, 'waktuMasuk', this.value)"></td>
-                    <td class="py-3 px-4"><input type="time" class="border rounded px-2 py-1 w-full" value="${data.waktuPulang || ''}" onchange="simpanWaktu(${index}, 'waktuPulang', this.value)"></td>
+                    <td class="py-3 px-4"><input type="time" step="1" class="border rounded px-2 py-1 w-full" value="${data.waktuMasuk || ''}" onchange="simpanWaktu(${index}, 'waktuMasuk', this.value)"></td>
+                    <td class="py-3 px-4"><input type="time" step="1" class="border rounded px-2 py-1 w-full" value="${data.waktuPulang || ''}" onchange="simpanWaktu(${index}, 'waktuPulang', this.value)"></td>
                     <td class="py-3 px-4"><select class="border rounded px-2 py-1 w-full" onchange="simpanStatus(${index}, this.value)">${buatOpsiStatus(data.status)}</select></td>
                     <td class="py-3 px-4 text-center"><button class="bg-red-500 hover:bg-red-700 text-white text-xs font-bold py-1 px-2 rounded" onclick="hapusAbsensi(${index})">Hapus</button></td>
                 `;
@@ -340,7 +394,6 @@
             }
         }
         
-        // Fungsi baru untuk menghapus semua data absensi
         function hapusSemuaLaporan() {
             if (confirm('Anda yakin ingin menghapus SEMUA data laporan? Tindakan ini tidak dapat dibatalkan.')) {
                 localStorage.removeItem('absensi_data');
@@ -349,7 +402,6 @@
             }
         }
         
-        // Fungsi pengiriman email diubah
         btnKirimLaporanEmail.addEventListener('click', () => {
             const absensiData = JSON.parse(localStorage.getItem('absensi_data')) || [];
 
